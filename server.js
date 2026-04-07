@@ -1,52 +1,57 @@
-const express = require("express");
+express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
-const http = require("http").createServer(app);
-const io = require("socket.io")(http);
+const server = http.createServer(app);
+const io = new Server(server);
 
-app.use(express.static("public"));
-
-const ADMIN_NAME = "abdulloh";
+app.use(express.static('public'));
 
 let messages = [];
-let users = {};
 
-io.on("connection", (socket) => {
-    let name = "user";
+function isAdmin(name) {
+  if (!name) return false;
+  const n = name.toLowerCase();
+  return n.includes('abdulloh') || n.includes('абдуллох');
+}
 
-    socket.on("join", (userName) => {
-        name = userName;
-        users[socket.id] = name;
+io.on('connection', (socket) => {
+  let user = { name: '', admin: false };
 
-        io.emit("online users", Object.values(users));
-    });
+  socket.emit('init', messages);
 
-    socket.on("chat message", (msg) => {
-        const data = {
-            user: name,
-            text: msg
-        };
+  socket.on('join', (name) => {
+    user.name = name;
+    user.admin = isAdmin(name);
+    socket.emit('admin', user.admin);
+  });
 
-        messages.push(data);
-        io.emit("chat message", data);
-    });
+  socket.on('message', (data) => {
+    const msg = {
+      id: Date.now(),
+      name: user.name,
+      text: data.text || null,
+      voice: data.voice || null,
+      time: new Date().toLocaleTimeString(),
+    };
 
-    // 👑 KICK
-    socket.on("kick user", (targetName) => {
-        if (name !== ADMIN_NAME) return;
+    messages.push(msg);
+    io.emit('message', msg);
+  });
 
-        for (let id in users) {
-            if (users[id] === targetName) {
-                io.to(id).emit("kicked");
-                io.sockets.sockets.get(id)?.disconnect();
-            }
-        }
-    });
+  socket.on('deleteMessage', (id) => {
+    if (!user.admin) return;
+    messages = messages.filter(m => m.id !== id);
+    io.emit('deleteMessage', id);
+  });
 
-    socket.on("disconnect", () => {
-        delete users[socket.id];
-        io.emit("online users", Object.values(users));
-    });
+  socket.on('editMessage', ({ id, text }) => {
+    if (!user.admin) return;
+    const msg = messages.find(m => m.id === id);
+    if (msg) msg.text = text;
+    io.emit('editMessage', { id, text });
+  });
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log("running"));
+server.listen(3000, () => console.log('Server running on port 3000'));
