@@ -5,48 +5,46 @@ const io = require("socket.io")(http);
 
 app.use(express.static("public"));
 
-const ADMIN = "admin";
+const ADMIN_NAME = "abdulloh";
+
 let messages = [];
-let bannedUsers = [];
+let users = {};
 
 io.on("connection", (socket) => {
-    let user = "user";
-    let room = "main";
+    let name = "user";
 
-    socket.on("join", (data) => {
-        user = data.name;
-        room = data.room;
+    socket.on("join", (userName) => {
+        name = userName;
+        users[socket.id] = name;
 
-        socket.join(room);
-
-        socket.emit("load messages", messages);
+        io.emit("online users", Object.values(users));
     });
 
     socket.on("chat message", (msg) => {
-        if (bannedUsers.includes(user)) return;
-
         const data = {
-            user,
-            text: msg,
-            room
+            user: name,
+            text: msg
         };
 
         messages.push(data);
-
-        io.to(room).emit("chat message", data);
+        io.emit("chat message", data);
     });
 
-    socket.on("admin ban", (name) => {
-        if (user === ADMIN) {
-            bannedUsers.push(name);
+    // 👑 KICK
+    socket.on("kick user", (targetName) => {
+        if (name !== ADMIN_NAME) return;
+
+        for (let id in users) {
+            if (users[id] === targetName) {
+                io.to(id).emit("kicked");
+                io.sockets.sockets.get(id)?.disconnect();
+            }
         }
     });
 
-    socket.on("admin clear", () => {
-        if (user === ADMIN) {
-            messages = [];
-            io.emit("chat message", { user: "system", text: "chat cleared" });
-        }
+    socket.on("disconnect", () => {
+        delete users[socket.id];
+        io.emit("online users", Object.values(users));
     });
 });
 
