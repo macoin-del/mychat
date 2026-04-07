@@ -1,127 +1,118 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Chat PRO</title>
-
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chat</title>
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #070b14;
-    color: white;
-}
-
-header {
-    padding: 15px;
-    background: #111a2e;
-    color: #4da3ff;
-    text-align: center;
-}
-
-#chat {
-    height: 75vh;
-    overflow-y: auto;
-    padding: 10px;
-}
-
-.msg {
-    background: #111a2e;
-    margin: 5px;
-    padding: 10px;
-    border-radius: 10px;
-}
-
-img {
-    max-width: 200px;
-    border-radius: 10px;
-    margin-top: 5px;
-}
-
-footer {
-    display: flex;
-    padding: 10px;
-    background: #111a2e;
-    gap: 5px;
-}
-
-input {
-    flex: 1;
-    padding: 10px;
-    background: #0b0f1a;
-    border: none;
-    color: white;
-}
-
-button {
-    padding: 10px;
-    background: #4da3ff;
-    border: none;
-    color: white;
-}
+body{margin:0;font-family:sans-serif;background:#0f0f0f;color:white;}
+#chat{height:calc(100vh - 120px);overflow-y:auto;padding:10px;}
+.msg{background:#1f1f1f;margin:5px;padding:8px;border-radius:10px;}
+#inputBar{position:fixed;bottom:0;left:0;right:0;display:flex;gap:5px;padding:10px;background:#111;}
+input{flex:1;padding:10px;border-radius:20px;border:none;}
+button{border:none;border-radius:50%;width:45px;height:45px;background:#4caf50;color:white;}
+.small{font-size:12px;color:gray;}
 </style>
 </head>
-
 <body>
-
-<header>💬 CHAT PRO</header>
 
 <div id="chat"></div>
 
-<footer>
-<input id="msg" placeholder="message...">
-<button onclick="send()">Send</button>
-
-<input type="file" id="file" accept="image/*">
-</footer>
+<div id="inputBar">
+<input id="text" placeholder="Message..." />
+<button id="send">➤</button>
+<button id="voice">🎤</button>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+let admin = false;
+let name = prompt('Your name:');
+socket.emit('join', name);
 
-let name = prompt("Enter name:");
-socket.emit("join", name);
+const chat = document.getElementById('chat');
+const input = document.getElementById('text');
+const send = document.getElementById('send');
+const voiceBtn = document.getElementById('voice');
 
-function send(){
-    const msg = document.getElementById("msg").value;
-    if (!msg) return;
+socket.on('admin', a => admin = a);
 
-    socket.emit("chat message", msg);
-    document.getElementById("msg").value = "";
+socket.on('init', (msgs) => {
+  msgs.forEach(render);
+});
+
+socket.on('message', render);
+
+socket.on('deleteMessage', (id) => {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+});
+
+socket.on('editMessage', ({id, text}) => {
+  const el = document.getElementById(id);
+  if (el) el.querySelector('.text').innerText = text;
+});
+
+function render(m){
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.id = m.id;
+
+  let content = `<b>${m.name}</b><div class='small'>${m.time}</div>`;
+
+  if(m.text) content += `<div class='text'>${m.text}</div>`;
+  if(m.voice) content += `<audio controls src='${m.voice}'></audio>`;
+
+  if(admin){
+    content += `<button onclick="del(${m.id})">delete</button>`;
+    content += `<button onclick="edit(${m.id})">edit</button>`;
+  }
+
+  div.innerHTML = content;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
 }
 
-// 📸 отправка фото
-document.getElementById("file").addEventListener("change", function(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+send.onclick = () => {
+  if(input.value.trim()){
+    socket.emit('message',{text:input.value});
+    input.value='';
+  }
+};
 
+function del(id){ socket.emit('deleteMessage',id); }
+function edit(id){
+  const text = prompt('new text');
+  socket.emit('editMessage',{id,text});
+}
+
+// Voice recording
+let mediaRecorder;
+let chunks = [];
+
+navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+  mediaRecorder = new MediaRecorder(stream);
+
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks,{type:'audio/webm'});
+    chunks = [];
     const reader = new FileReader();
-
-    reader.onload = function(e) {
-        socket.emit("chat message", {
-            type: "image",
-            user: name,
-            image: e.target.result
-        });
+    reader.onload = () => {
+      socket.emit('message',{voice:reader.result});
     };
-
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
+  };
 });
 
-// 💬 получение сообщений
-socket.on("chat message", (data) => {
-    const div = document.createElement("div");
-    div.className = "msg";
+voiceBtn.addEventListener('mousedown',()=>mediaRecorder.start());
+voiceBtn.addEventListener('mouseup',()=>mediaRecorder.stop());
+voiceBtn.addEventListener('touchstart',()=>mediaRecorder.start());
+voiceBtn.addEventListener('touchend',()=>mediaRecorder.stop());
 
-    if (data.type === "image") {
-        div.innerHTML = `<b>${data.user}</b><br><img src="${data.image}">`;
-    } else {
-        div.innerHTML = `<b>${data.user}</b>: ${data}`;
-    }
-
-    document.getElementById("chat").appendChild(div);
-});
 </script>
-
 </body>
 </html>
+*/
