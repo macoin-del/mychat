@@ -5,28 +5,47 @@ const io = require("socket.io")(http);
 
 app.use(express.static("public"));
 
-const ADMIN_NAME = "admin";
+const ADMIN = "admin";
+let messages = [];
+let bannedUsers = [];
 
 io.on("connection", (socket) => {
-    let userName = "user";
+    let user = "user";
+    let room = "main";
 
-    socket.on("set name", (name) => {
-        userName = name;
+    socket.on("join", (data) => {
+        user = data.name;
+        room = data.room;
+
+        socket.join(room);
+
+        socket.emit("load messages", messages);
     });
 
     socket.on("chat message", (msg) => {
-        io.emit("chat message", {
-            user: userName,
-            text: msg
-        });
+        if (bannedUsers.includes(user)) return;
+
+        const data = {
+            user,
+            text: msg,
+            room
+        };
+
+        messages.push(data);
+
+        io.to(room).emit("chat message", data);
     });
 
-    socket.on("admin msg", (data) => {
-        if (userName === ADMIN_NAME) {
-            io.emit("chat message", {
-                user: "👑 ADMIN",
-                text: data
-            });
+    socket.on("admin ban", (name) => {
+        if (user === ADMIN) {
+            bannedUsers.push(name);
+        }
+    });
+
+    socket.on("admin clear", () => {
+        if (user === ADMIN) {
+            messages = [];
+            io.emit("chat message", { user: "system", text: "chat cleared" });
         }
     });
 });
